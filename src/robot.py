@@ -6,7 +6,7 @@ import json
 import socket
 
 server_host = '127.0.0.1'
-server_port = 8888
+server_port = 8889
 robot_id = 1
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as serverSock:

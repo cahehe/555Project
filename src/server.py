@@ -1,12 +1,10 @@
 #!/usr/bin/python3
 
 from PacketRW import PacketRW
-from Hotspot import Hotspot
-from Robot import Robot
+from World import World
 
 import json
 import math
-import random
 import select
 import socket
 import sys
@@ -19,69 +17,13 @@ quit_event = threading.Event()
 
 
 server_host = '127.0.0.1'
-server_port = 8888
+server_port = 8889
 
-
-last_robot_id = 0
-robots = dict()
-
-hotspots = [Hotspot(1, 1), Hotspot(5, 5), Hotspot(3, 4)]
-
-world_lock = threading.Lock()
-
-def new_robot():
-    with world_lock:
-        # Generate a new robot id
-        global last_robot_id
-        global robots
-        robot_id = last_robot_id + 1
-        last_robot_id = robot_id
-        # Create a new robot object and assign in dictionary
-        robot = Robot()
-        robots[robot_id] = robot
-        return robot_id, robot
-
-def remove_robot(robot_id):
-    with world_lock:
-        global robots
-        robots[robot_id] = None
-
-def handle_strength_request(robot):
-    # it takes time to sample
-    time.sleep(1)
-    with world_lock:
-        # TODO: actually compute strengths based on hotspots
-        return [1, 2, 3, 4, 5]
-
-def handle_move_request(robot, delta_x, delta_y):
-    # it takes time to move
-    time.sleep(1)
-    with world_lock:
-        # apply motion
-        robot.x = robot.x + delta_x*random.uniform(10/9, 9/10)
-        robot.y = robot.y + delta_y*random.uniform(10/9, 9/10)
-        pass
-
-def handle_position_prediction(robot, px, py):
-    with world_lock:
-        robot.px = px
-        robot.py = py
-
-def get_draw_data():
-    global robots
-    global hotspots
-    robots_out = []
-    hotspots_out = []
-    with world_lock:
-        for robot in robots.values():
-            robots_out.append((robot.x, robot.y, robot.px, robot.py))
-        for hotspot in hotspots:
-            hotspots_out.append((hotspot.x, hotspot.y))
-    return robots_out, hotspots_out
+world = World()
 
 def robot_thread(conn, addr):
     # create a robot for this connection
-    robot_id, robot = new_robot()
+    robot_id, robot = world.new_robot()
     print('connection from ', addr)
     print(f'robot id: {robot_id}')
 
@@ -91,19 +33,19 @@ def robot_thread(conn, addr):
         print(repr(d))
 
         if d['type'] == 'strength_request':
-            strengths = handle_strength_request(robot)
+            strengths = world.handle_strength_request(robot)
             rw.send({'type': 'strengths', 'strengths': strengths})
         elif d['type'] == 'move_request':
-            handle_move_request(robot, d['dx'], d['dy'])
+            world.handle_move_request(robot, d['dx'], d['dy'])
         elif d['type'] == 'position_prediction':
-            handle_position_prediction(robot, d['px'], d['py'])
+            world.handle_position_prediction(robot, d['px'], d['py'])
 
     # close this connection
     print('closing connection ', addr)
     conn.sendall(b'goodbye')
     conn.close()
     # remove this connection's robot
-    remove_robot(robot_id)
+    world.remove_robot(robot_id)
 
 def server_task():
     allthreads = []
@@ -123,7 +65,7 @@ def draw():
 
     PIXELS_PER_METER = 40
 
-    robots, hotspots = get_draw_data()
+    robots, hotspots = world.get_draw_data()
 
     for r in robots:
         x = math.floor(r[0]*PIXELS_PER_METER)
