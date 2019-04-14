@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+from PacketRW import PacketRW
+
 import json
 import random
 import socket
@@ -60,30 +62,6 @@ def handle_position_prediction(robot, px, py):
     with robots_lock:
         robot.px = px
         robot.py = py
-
-class PacketRW:
-    def __init__(self, conn):
-        self.all_bytes = bytes()
-        self.conn = conn
-
-    def recv(self):
-        while True:
-            # find the first complete packet in the buffer
-            pos = self.all_bytes.find(b'\x00')
-            if pos == -1:
-                # no valid packets in buffer, receive more data
-                self.all_bytes += self.conn.recv(1024)
-            else:
-                #print('all_bytes:', repr(self.all_bytes))
-                # a packet is in the buffer, decode and return
-                packet = self.all_bytes[0:pos]
-                self.all_bytes = self.all_bytes[pos+1:]
-                #print('all_bytes (after removal):', repr(self.all_bytes))
-                return json.loads(packet)
-
-    def send(self, d):
-        json_packet = json.dumps(d, separators=(',', ':'))
-        self.conn.sendall(json_packet.encode() + b'\x00')
 
 def robot_thread(conn, addr):
     # create a robot for this connection
