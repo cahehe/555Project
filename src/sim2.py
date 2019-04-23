@@ -1,134 +1,128 @@
 #!/usr/bin/python3
 
+import sdl2.ext
 import math
+import numpy.matlib
+import numpy
+import random
+import World
 
-class Node:
-    def __init__(self, id, x, y):
-        self.id = id
-        self.x = x
-        self.y = y
-        self.neighbors = []
-        self.dv_table = {}
 
-#rover_list = [ Rover('r1', 0, 0), Rover('r2', 1, 0), Rover('r3', 1, 1), Rover('r4', 0, 1) ];
-#bee_list = [ Node('b1', 0.5, 0.5) ];
+def random_set(rover_num, rover_radius, bee_num, bee_radius):
+    rover_list = []
+    bee_list = []
 
-rover_list = [
-    Node('r1', 0, 0),
-    Node('r2', 0, 2),
-];
+    for i in range(rover_num):
+        x = math.cos(i/rover_num*2*math.pi)*rover_radius
+        y = math.sin(i/rover_num*2*math.pi)*rover_radius
+        rover_list.append((x, y))
 
-bee_list = [
-    Node('b1', 0.5, 0.5),
-    Node('b2', 1.0, 1.0),
-    Node('b3', 1.5, 1.5),
-    Node('b4', 0.0, 1.0),
-    Node('b5', 0.5, 1.5),
-];
+    for i in range(bee_num):
+        x = random.uniform(-bee_radius, bee_radius)
+        y = random.uniform(-bee_radius, bee_radius)
+        bee_list.append((x, y))
 
-node_list = rover_list + bee_list
+    return rover_list, bee_list
 
-def distance(a, b):
-    return math.sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y))
+def even_set(rover_num, rover_radius, bee_num, bee_radius):
+    rover_list = []
+    bee_list = []
 
-def find_node(id):
-    for node in node_list:
-        if node.id == id:
-            return node
-    return None
+    for i in range(rover_num):
+        x = math.cos(i/rover_num*2*math.pi)
+        y = math.sin(i/rover_num*2*math.pi)
+        rover_list.append((x, y))
 
-def triangulate(tri_data):
-    prediction_list = []
+    for i in range(bee_num):
+        for j in range(bee_num):
+            bee_list.append(((i/(bee_num - 1) - 0.5)*2*bee_radius, (j/(bee_num - 1) - 0.5)*2*bee_radius))
 
-    for i1 in range(len(tri_data)):
-        t1 = tri_data[i1]
-        for i2 in range(i1 + 1, len(tri_data)):
-            t2 = tri_data[i2]
-            AB = (t2[0] - t1[0], t2[1] - t1[1])
-            d = math.sqrt(AB[0]*AB[0] + AB[1]*AB[1])
-            l1 = t1[2]
-            l2 = t2[2]
-            if l1 + l2 < d:
-                # No solution here
-                continue
-            # Possible angle opposite from l2
-            theta = math.acos((d*d + l1*l1 - l2*l2)/(2*d*l1))
-            AC1 = (math.cos(theta)*AB[0]*l1/d + math.sin(theta)*AB[1]*l1/d, -math.sin(theta)*AB[0]*l1/d + math.cos(theta)*AB[1]*l1/d)
-            AC2 = (math.cos(theta)*AB[0]*l1/d - math.sin(theta)*AB[1]*l1/d,  math.sin(theta)*AB[0]*l1/d + math.cos(theta)*AB[1]*l1/d)
-            guess1 = (AC1[0] + t1[0], AC1[1] + t1[1])
-            guess2 = (AC2[0] + t2[0], AC2[1] + t2[1])
-            print("theta: " + str(theta))
-            print("guess1: " + str(guess1))
-            print("guess2: " + str(guess2))
+    return rover_list, bee_list
 
-    return 0, 0
+def get_point_pixels(x, y):
+    ORIGIN_X_PIXELS = 300
+    ORIGIN_Y_PIXELS = 300
+    PIXELS_PER_METER = 180
+    return math.floor(x*PIXELS_PER_METER + ORIGIN_X_PIXELS), math.floor(y*PIXELS_PER_METER + ORIGIN_Y_PIXELS)
 
-max_range = 0.9
+def draw_world(world):
+    renderer.fill((0,0,600,600), color=sdl2.ext.Color(200,200,200))
 
-for node in node_list:
-    for other_node in node_list:
-        if node != other_node:
-            d = distance(node, other_node)
-            if d < max_range:
-                node.neighbors.append(other_node)
+    for node in world.node_list:
+        for n in node.neighbors:
+            x0, y0 = get_point_pixels(node.x, node.y)
+            x1, y1 = get_point_pixels(n.x, n.y)
+            renderer.draw_line((x0, y0, x1, y1), color=sdl2.ext.Color(100, 100, 100))
 
-for rover in rover_list:
-    rover.dv_table[rover.id] = 0
+    for node in world.bee_list:
+        x, y = get_point_pixels(node.x, node.y)
+        bee_rect = (x - 3, y - 3, 7, 7)
+        renderer.fill([bee_rect], color=sdl2.ext.Color(200, 0, 0))
+        if node.px != None and node.py != None:
+            px, py = get_point_pixels(node.px, node.py)
+            pred_rect = (px - 5, py - 5, 11, 11)
+            renderer.draw_rect([pred_rect], color=sdl2.ext.Color(200, 0, 0))
+            renderer.draw_line((x, y, px, py), color=sdl2.ext.Color(200, 0, 0))
 
-    for iteration in range(10):
-        for node in node_list:
-            if rover.id in node.dv_table:
-                for n in node.neighbors:
-                    # Send the DV packet
-                    if not rover.id in n.dv_table or node.dv_table[rover.id] + 1 < n.dv_table[rover.id]:
-                        print(node.id + ' updating neighbor ' + n.id + ' to ' + str(node.dv_table[rover.id] + 1))
-                        n.dv_table[rover.id] = node.dv_table[rover.id] + 1
+    for node in world.rover_list:
+        x, y = get_point_pixels(node.x, node.y)
+        rover_rect = (x - 4, y - 4, 9, 9)
+        renderer.fill([rover_rect], color=sdl2.ext.Color(0, 0, 200))
 
-# Calculate distance per hop approximation (correction) per rover
-for rover in rover_list:
-    cv_distsum = 0
-    cv_hopsum = 0
-    # Total distances and hops to all other rovers
-    for other_rover in rover_list:
-        if rover != other_rover:
-            cv_distsum += distance(rover, other_rover)
-            cv_hopsum += rover.dv_table[other_rover.id]
-    # Correction value is quotient of these
-    rover.cv = cv_distsum / cv_hopsum
 
-# Hand waving: Assume corrections have flooded the network
+def compare_methods():
+    results = []
 
-for node in node_list:
-    # Find the closest rover to each bee in terms of hops
-    if node in rover_list:
-        # Rovers need not apply
-        continue
+    for i in range(300):
+        world = World.World(*random_set(3, 1.5, 20, 1.5))
 
-    nearest_rover_id = min(node.dv_table, key=node.dv_table.get)
-    print('closest rover to node ' + node.id + ': ' + nearest_rover_id)
+        world.compute_dv_hop()
+        dv_hop_error = world.rms_error()
 
-    nearest_rover = find_node(nearest_rover_id)
-    # This is the cv that would have arrived
-    node.cv = nearest_rover.cv
+        world.compute_dv_distance(0.05)
+        dv_distance_error = world.rms_error()
 
-    tri_data = []
-    for rover in rover_list:
-        dist_estimate = node.cv * node.dv_table[rover.id]
-        tri_data.append((rover.x, rover.y, dist_estimate))
+        world.compute_direct_distance(0.05)
+        direct_distance_error = world.rms_error()
 
-    # Calculate position from approximate rover distances
-    node.px, node.py = triangulate(tri_data)
+        if dv_hop_error and dv_distance_error and direct_distance_error:
+            results.append((dv_hop_error, dv_distance_error, direct_distance_error))
 
-print('[nodes]')
-print(len(node_list))
-for node in node_list:
-    print(node.id)
-    print(node.x, node.y)
-    print(len(node.neighbors))
-    print('neighbors: ' + ' '.join(b.id for b in node.neighbors))
-    print('correction: ' + str(node.cv))
-    for rover in rover_list:
-        print('hops to ' + rover.id + ': ' + str(node.dv_table[rover.id]))
-        print('approximate distance to rover ' + rover.id + ': ' + str(node.cv * node.dv_table[rover.id]))
-        print('actual distance to rover ' + rover.id + ': ' + str(distance(node, rover)))
+    print('# of tests surveyed: ' + str(len(results)))
+    print('DV-Hop Error: ' + str(numpy.mean([r[0] for r in results])) + ' ± ' + str(numpy.std([r[0] for r in results])))
+    print('DV-Distance Error: ' + str(numpy.mean([r[1] for r in results])) + ' ± ' + str(numpy.std([r[1] for r in results])))
+    print('Direct Ping Error: ' + str(numpy.mean([r[2] for r in results])) + ' ± ' + str(numpy.std([r[2] for r in results])))
+
+def compute_and_draw():
+    world = World.World(*random_set(3, 1.5, 20, 1.5))
+    #world = World.World(*even_set(3, 1, 4, 0.6))
+    world.compute_dv_hop()
+    #world.compute_dv_distance(0.2)
+    #world.compute_direct_distance(0.2)
+
+    draw_world(world)
+    renderer.present()
+
+    print('RMS Error: ' + str(world.rms_error()))
+
+def interactive_mode():
+    sdl2.ext.init()
+    window = sdl2.ext.Window("Simulation View", size=(600, 600))
+    window.show()
+    renderer = sdl2.ext.Renderer(window)
+
+    compute_and_draw()
+
+    quit = False
+    while not quit:
+        events = sdl2.ext.get_events()
+        for event in events:
+            if event.type == sdl2.SDL_QUIT:
+                quit = True
+            if event.type == sdl2.SDL_KEYDOWN:
+                compute_and_draw()
+
+compare_methods()
+
+#interactive_mode()
 
